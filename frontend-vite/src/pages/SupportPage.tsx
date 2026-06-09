@@ -53,7 +53,7 @@ export default function Support() {
 
   const fetchTickets = async () => {
     try {
-      const list = await apiRequest("/tickets/list");
+      const list = await apiRequest("/support/tickets");
       setTickets(list);
     } catch (err: any) {
       console.error("Could not load tickets:", err);
@@ -77,7 +77,7 @@ export default function Support() {
 
     setLoading(true);
     try {
-      await apiRequest("/tickets/create", {
+      await apiRequest("/support/tickets", {
         method: "POST",
         body: JSON.stringify({ subject, message }),
       });
@@ -107,7 +107,7 @@ export default function Support() {
 
     setReplyLoading(true);
     try {
-      const newMsg = await apiRequest(`/tickets/${selectedTicket.id}/message`, {
+      const newMsg = await apiRequest(`/support/tickets/${selectedTicket.id}/message`, {
         method: "POST",
         body: JSON.stringify({ message: replyMessage }),
       });

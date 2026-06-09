@@ -15,32 +15,36 @@ export default function Dashboard() {
   const t = translations[lang];
 
   const [streakLoading, setStreakLoading] = useState(false);
-  const [claimCountdown, setClaimCountdown] = useState("02:44:09");
+  const [claimCountdown, setClaimCountdown] = useState("24:00:00");
   const isAr = lang === "ar";
 
-  // Simulate claim countdown
+  // Calculate countdown until next daily claim (resets 24h after last claim)
+  const getSecondsUntilNextClaim = () => {
+    if (!user?.last_claim_date) return 0;
+    const last = new Date(user.last_claim_date);
+    const nextClaim = new Date(last.getTime() + 24 * 60 * 60 * 1000);
+    const diff = Math.max(0, Math.floor((nextClaim.getTime() - Date.now()) / 1000));
+    return diff;
+  };
+
+  const formatSeconds = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
   useEffect(() => {
+    if (!user) return;
+    let remaining = getSecondsUntilNextClaim();
+    setClaimCountdown(formatSeconds(remaining));
+
     const timer = setInterval(() => {
-      const parts = claimCountdown.split(":").map(Number);
-      let [h, m, s] = parts;
-      if (s > 0) s--;
-      else {
-        s = 59;
-        if (m > 0) m--;
-        else {
-          m = 59;
-          if (h > 0) h--;
-          else {
-            h = 23;
-          }
-        }
-      }
-      setClaimCountdown(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-      );
+      remaining = Math.max(0, remaining - 1);
+      setClaimCountdown(formatSeconds(remaining));
     }, 1000);
     return () => clearInterval(timer);
-  }, [claimCountdown]);
+  }, [user?.last_claim_date]);
 
   useEffect(() => {
     if (!token) {
@@ -68,6 +72,15 @@ export default function Dashboard() {
     );
   }
 
+  const hasClaimedToday = (() => {
+    if (!user.last_claim_date) return false;
+    const last = new Date(user.last_claim_date);
+    const now = new Date();
+    return last.getFullYear() === now.getFullYear() &&
+      last.getMonth() === now.getMonth() &&
+      last.getDate() === now.getDate();
+  })();
+
   // Calculate Level and XP Progress (Max XP = 1000 per level)
   const currentXP = parseFloat(user.total_earned.toString());
   const level = Math.floor(currentXP / 1000);
@@ -78,7 +91,7 @@ export default function Dashboard() {
   const handleClaimStreak = async () => {
     setStreakLoading(true);
     try {
-      const result = await apiRequest("/users/streak/claim", { method: "POST" });
+      const result = await apiRequest("/rewards/claim-streak", { method: "POST" });
       addToast(
         isAr ? "تم المطالبة بنجاح!" : "Streak Claimed!",
         isAr 
@@ -373,10 +386,18 @@ export default function Dashboard() {
 
           <button
             onClick={handleClaimStreak}
-            disabled={streakLoading || user.daily_streak > 0}
-            className="w-full py-4 bg-slate-100 disabled:bg-slate-50 text-slate-400 disabled:text-slate-400 font-bold rounded-2xl text-xs transition-all cursor-not-allowed"
+            disabled={streakLoading || hasClaimedToday}
+            className={`w-full py-4 font-bold rounded-2xl text-xs transition-all ${
+              hasClaimedToday
+                ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                : "bg-primary text-white hover:bg-primary-hover cursor-pointer"
+            }`}
           >
-            {isAr ? "تم المطالبة اليوم" : "Claimed Today"}
+            {streakLoading
+              ? (isAr ? "جارٍ المطالبة..." : "Claiming...")
+              : hasClaimedToday
+                ? (isAr ? "تم المطالبة اليوم" : "Claimed Today")
+                : (isAr ? "اطلب مكافأتك اليومية" : "Claim Daily Reward")}
           </button>
         </div>
 

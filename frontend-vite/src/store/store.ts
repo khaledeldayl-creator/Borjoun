@@ -7,6 +7,7 @@ export interface UserProfile {
   wallet_balance: number;
   total_earned: number;
   daily_streak: number;
+  last_claim_date: string | null;
   role: string;
   status: string;
   referral_code: string;

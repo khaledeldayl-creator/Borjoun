@@ -28,7 +28,11 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(data.error || data.detail || "Something went wrong");
+    const raw = data.error || data.detail || "Something went wrong";
+    const message = typeof raw === "string" && raw.trimStart().startsWith("<")
+      ? "Server error — please try again later."
+      : raw;
+    throw new Error(message);
   }
 
   return data;

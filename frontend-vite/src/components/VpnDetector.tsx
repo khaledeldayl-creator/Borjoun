@@ -1,11 +1,22 @@
 "use client";
 
+import { useEffect } from "react";
 import { useAppStore } from "@/store/store";
 import { translations } from "@/utils/translations";
+import { apiRequest } from "@/utils/api";
 
 export default function VpnDetector() {
-  const { vpnBlocked, lang } = useAppStore();
+  const { vpnBlocked, setVpnBlocked, lang, token } = useAppStore();
   const t = translations[lang];
+
+  useEffect(() => {
+    if (!token) return;
+    apiRequest("/check-ip")
+      .then((data) => {
+        if (data.isVpn) setVpnBlocked(true);
+      })
+      .catch(() => {});
+  }, [token]);
 
   if (!vpnBlocked) return null;
 

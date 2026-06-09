@@ -103,6 +103,21 @@ const initDb = async () => {
       );
     `);
 
+    // 5b. Add missing columns to withdrawals if they don't exist
+    await db.query(`ALTER TABLE public.withdrawals ADD COLUMN IF NOT EXISTS transaction_reference text`);
+    await db.query(`ALTER TABLE public.withdrawals ADD COLUMN IF NOT EXISTS admin_notes text`);
+
+    // 5c. Ticket Messages Table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS public.ticket_messages (
+        id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+        ticket_id uuid REFERENCES public.support_tickets(id) ON DELETE CASCADE NOT NULL,
+        message text NOT NULL,
+        is_admin boolean DEFAULT false,
+        created_at timestamp with time zone DEFAULT now()
+      );
+    `);
+
     // 6. Coupons System Tables
     await db.query(`
       CREATE TABLE IF NOT EXISTS public.coupon_settings (

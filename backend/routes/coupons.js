@@ -303,7 +303,7 @@ router.post('/dynamic-ads/:id/click', async (req, res) => {
 // Admin Routes (using existing requireAdmin)
 // ──────────────────────────────────────────────
 
-router.get('/admin/settings', requireAuth, requireAdmin, async (req, res) => {
+router.get('/admin/coupon-settings', requireAuth, requireAdmin, async (req, res) => {
   try {
     const settings = await getSettings();
     res.json({
@@ -320,7 +320,7 @@ router.get('/admin/settings', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-router.put('/admin/settings', requireAuth, requireAdmin, async (req, res) => {
+router.put('/admin/coupon-settings', requireAuth, requireAdmin, async (req, res) => {
   const { timerDuration, maxCouponValue, dailyLimit, couponSystemEnabled, winnersPerDay, couponValue } = req.body;
   try {
     const result = await db.query(`

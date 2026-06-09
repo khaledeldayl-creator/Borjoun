@@ -63,7 +63,23 @@ router.post('/rewards/claim-streak', requireAuth, async (req, res) => {
 router.get('/support/tickets', requireAuth, async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM support_tickets WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id]);
-    res.json(result.rows);
+    const ticketIds = result.rows.map(t => t.id);
+    let messagesMap = {};
+    if (ticketIds.length > 0) {
+      const msgsResult = await db.query(
+        'SELECT * FROM ticket_messages WHERE ticket_id = ANY($1::uuid[]) ORDER BY created_at ASC',
+        [ticketIds]
+      );
+      msgsResult.rows.forEach(m => {
+        if (!messagesMap[m.ticket_id]) messagesMap[m.ticket_id] = [];
+        messagesMap[m.ticket_id].push({ id: m.id, message: m.message, is_admin: m.is_admin, created_at: m.created_at });
+      });
+    }
+    const tickets = result.rows.map(t => ({
+      ...t,
+      messages: messagesMap[t.id] || [{ id: 'initial', message: t.message, is_admin: false, created_at: t.created_at }]
+    }));
+    res.json(tickets);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -84,9 +100,37 @@ router.post('/support/tickets', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/support/tickets/:id/message', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'Message is required' });
+
+  try {
+    const ticket = await db.query('SELECT * FROM support_tickets WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    if (ticket.rows.length === 0) return res.status(404).json({ error: 'Ticket not found' });
+    if (ticket.rows[0].status === 'closed') return res.status(400).json({ error: 'Ticket is closed' });
+
+    await db.query("UPDATE support_tickets SET status = 'open', updated_at = NOW() WHERE id = $1", [id]);
+
+    const result = await db.query(
+      'INSERT INTO ticket_messages (ticket_id, message, is_admin) VALUES ($1, $2, false) RETURNING *',
+      [id, message]
+    );
+    const row = result.rows[0];
+    res.json({ id: row.id, message: row.message, is_admin: row.is_admin, created_at: row.created_at });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // --- Withdrawals ---
-router.post('/withdraw', requireAuth, async (req, res) => {
-  const { amount, method, details } = req.body;
+// Accept both /withdraw and /withdrawals/request for frontend compatibility
+const handleWithdraw = async (req, res) => {
+  // Accept payout_method/payout_details (frontend) or method/details (legacy)
+  const method = req.body.payout_method || req.body.method;
+  const details = req.body.payout_details || req.body.details;
+  const { amount } = req.body;
+
   if (!amount || !method || !details) return res.status(400).json({ error: 'Missing fields' });
 
   if (req.user.wallet_balance < amount) {
@@ -99,28 +143,38 @@ router.post('/withdraw', requireAuth, async (req, res) => {
     // Deduct balance
     await db.query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [amount, req.user.id]);
 
-    // Create record
+    // Create record — use canonical column names
     const result = await db.query(
       'INSERT INTO withdrawals (user_id, amount, method, details) VALUES ($1, $2, $3, $4) RETURNING *',
       [req.user.id, amount, method, details]
     );
 
     await db.query('COMMIT');
-    res.json(result.rows[0]);
+    // Return with both field name conventions so frontend renders correctly
+    const row = result.rows[0];
+    res.json({ ...row, payout_method: row.method, payout_details: row.details });
   } catch (err) {
     await db.query('ROLLBACK');
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+};
 
-router.get('/withdraw/history', requireAuth, async (req, res) => {
+router.post('/withdraw', requireAuth, handleWithdraw);
+router.post('/withdrawals/request', requireAuth, handleWithdraw);
+
+const handleWithdrawHistory = async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id]);
-    res.json(result.rows);
+    // Normalize field names for frontend
+    const rows = result.rows.map(r => ({ ...r, payout_method: r.method, payout_details: r.details }));
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+};
+
+router.get('/withdraw/history', requireAuth, handleWithdrawHistory);
+router.get('/withdrawals/history', requireAuth, handleWithdrawHistory);
 // --- Deposits ---
 router.post('/deposits/request', requireAuth, async (req, res) => {
   const { amount } = req.body;
@@ -159,6 +213,59 @@ router.post('/deposits/:id/upload', requireAuth, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Deposit request not found or invalid status' });
     res.json(result.rows[0]);
   } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// --- Public: VPN/Proxy Check ---
+router.get('/check-ip', async (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+  try {
+    const risk = await checkIpRisk(ip);
+    res.json({ isVpn: risk.isVpn, riskScore: risk.riskScore });
+  } catch (err) {
+    res.json({ isVpn: false, riskScore: 0 });
+  }
+});
+
+// --- Admin: Simulate Postback (Dev/Testing) ---
+router.post('/admin/simulate-postback', requireAuth, async (req, res) => {
+  const { network, payout, offer_id } = req.query;
+  if (!network || !payout) return res.status(400).json({ error: 'Missing network or payout' });
+
+  try {
+    const amount = parseFloat(payout) * 1000; // convert USD to coins
+    const txId = `SIM_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    const checkTx = await db.query('SELECT id FROM conversions WHERE transaction_id = $1', [txId]);
+    if (checkTx.rows.length > 0) {
+      return res.status(409).json({ error: 'Transaction already processed' });
+    }
+
+    await db.query(
+      'INSERT INTO conversions (user_id, offerwall, offer_id, amount, transaction_id, ip_address) VALUES ($1, $2, $3, $4, $5, $6)',
+      [req.user.id, network, offer_id || 'simulated_offer', amount, txId, '127.0.0.1']
+    );
+
+    await db.query(
+      'UPDATE users SET wallet_balance = wallet_balance + $1, total_earned = total_earned + $1 WHERE id = $2',
+      [amount, req.user.id]
+    );
+
+    // Referral commission
+    const userRes = await db.query('SELECT referred_by FROM users WHERE id = $1', [req.user.id]);
+    const referredBy = userRes.rows[0]?.referred_by;
+    if (referredBy) {
+      const commission = amount * 0.10;
+      await db.query(
+        'UPDATE users SET wallet_balance = wallet_balance + $1, total_earned = total_earned + $1 WHERE id = $2',
+        [commission, referredBy]
+      );
+    }
+
+    res.json({ success: true, message: `Credited ${amount} coins for ${offer_id || 'offer'} on ${network}` });
+  } catch (err) {
+    console.error('Simulate postback error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -409,10 +516,15 @@ router.post('/admin/withdrawals/:id/action', requireAuth, requireAdmin, async (r
 
     const wd = wdResult.rows[0];
 
-    // Update status
+    // Update status — transaction_reference and admin_notes columns added via server init
     const result = await db.query(
-      'UPDATE withdrawals SET status = $1, transaction_reference = $2, admin_notes = $3, updated_at = NOW() WHERE id = $4 RETURNING *',
-      [status, transaction_reference, admin_notes, id]
+      `UPDATE withdrawals
+       SET status = $1,
+           transaction_reference = COALESCE($2, transaction_reference),
+           admin_notes = COALESCE($3, admin_notes),
+           updated_at = NOW()
+       WHERE id = $4 RETURNING *`,
+      [status, transaction_reference || null, admin_notes || null, id]
     );
 
     // If rejected, refund user wallet balance
@@ -646,12 +758,22 @@ router.get('/admin/tickets', requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await db.query('SELECT t.*, u.username FROM support_tickets t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC');
 
-    // Inject mock messages if not stored in tables (since DB only holds ticket description, or query)
+    const ticketIds = result.rows.map(t => t.id);
+    let messagesMap = {};
+    if (ticketIds.length > 0) {
+      const msgsResult = await db.query(
+        'SELECT * FROM ticket_messages WHERE ticket_id = ANY($1::uuid[]) ORDER BY created_at ASC',
+        [ticketIds]
+      );
+      msgsResult.rows.forEach(m => {
+        if (!messagesMap[m.ticket_id]) messagesMap[m.ticket_id] = [];
+        messagesMap[m.ticket_id].push({ id: m.id, message: m.message, is_admin: m.is_admin, created_at: m.created_at });
+      });
+    }
+
     const tickets = result.rows.map(t => ({
       ...t,
-      messages: [
-        { id: '1', message: t.message, is_admin: false, created_at: t.created_at }
-      ]
+      messages: messagesMap[t.id] || [{ id: 'initial', message: t.message, is_admin: false, created_at: t.created_at }]
     }));
     res.json(tickets);
   } catch (err) {
@@ -667,6 +789,11 @@ router.post('/admin/tickets/:id/reply', requireAuth, requireAdmin, async (req, r
   try {
     await db.query("UPDATE support_tickets SET status = 'replied', updated_at = NOW() WHERE id = $1", [id]);
 
+    const result = await db.query(
+      'INSERT INTO ticket_messages (ticket_id, message, is_admin) VALUES ($1, $2, true) RETURNING *',
+      [id, message]
+    );
+
     await logAdminAction(
       req.user.username,
       'REPLY_TICKET',
@@ -674,7 +801,8 @@ router.post('/admin/tickets/:id/reply', requireAuth, requireAdmin, async (req, r
       ip
     );
 
-    res.json({ id: Math.random().toString(36).substring(2, 9), message, is_admin: true, created_at: new Date().toISOString() });
+    const row = result.rows[0];
+    res.json({ id: row.id, message: row.message, is_admin: row.is_admin, created_at: row.created_at });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }

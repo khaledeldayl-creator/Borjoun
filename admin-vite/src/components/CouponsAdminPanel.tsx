@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Trash2, Plus, LogOut, Check, Image as ImageIcon, Settings } from 'lucide-react';
 
-const API_URL = 'http://localhost:8000/api/admin';
-const BASE_URL = 'http://localhost:8000';
+const API_URL = '/api/admin';
+const BASE_URL = '';
 
 export default function CouponsAdminPanel() {
   const [settings, setSettings] = useState({
@@ -46,7 +46,7 @@ export default function CouponsAdminPanel() {
     try {
       const headers = getHeaders();
       const [settingsRes, drawRes, adRes, historyRes, dynamicAdsRes] = await Promise.all([
-        fetch(`${API_URL}/settings`, { headers }),
+        fetch(`${API_URL}/coupon-settings`, { headers }),
         fetch(`${API_URL}/draw`, { headers }),
         fetch(`${API_URL}/advertisement`, { headers }),
         fetch(`${API_URL}/history`, { headers }),
@@ -85,7 +85,7 @@ export default function CouponsAdminPanel() {
 
   const saveSettings = async () => {
     try {
-      await fetch(`${API_URL}/settings`, {
+      await fetch(`${API_URL}/coupon-settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getHeaders() },
         body: JSON.stringify(settings)

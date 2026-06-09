@@ -24,9 +24,11 @@ create table if not exists public.withdrawals (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references public.users(id) on delete cascade not null,
   amount decimal(12, 2) not null,
-  method text not null, -- 'paypal' (others removed)
+  method text not null,
   details text not null,
   status text default 'pending', -- 'pending', 'approved', 'rejected'
+  transaction_reference text,
+  admin_notes text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
@@ -53,6 +55,26 @@ create table if not exists public.support_tickets (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
+
+-- Ticket Messages Table
+create table if not exists public.ticket_messages (
+  id uuid default uuid_generate_v4() primary key,
+  ticket_id uuid references public.support_tickets(id) on delete cascade not null,
+  message text not null,
+  is_admin boolean default false,
+  created_at timestamp with time zone default now()
+);
+
+alter table public.ticket_messages enable row level security;
+create policy "Users can view messages on their own tickets" on public.ticket_messages
+  for select using (
+    exists (select 1 from public.support_tickets t where t.id = ticket_id and t.user_id = auth.uid())
+  );
+create policy "Users can insert messages on their own tickets" on public.ticket_messages
+  for insert with check (
+    exists (select 1 from public.support_tickets t where t.id = ticket_id and t.user_id = auth.uid())
+    and is_admin = false
+  );
 
 -- Postback History / Conversions Table
 create table if not exists public.conversions (
