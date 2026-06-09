@@ -15,6 +15,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api', apiRoutes);
 const couponsRoutes = require('./routes/coupons');
 app.use('/api', couponsRoutes);
+const wheelRoutes = require('./routes/wheel');
+app.use('/api', wheelRoutes);
 
 // Database initialization
 const db = require('./db');
@@ -99,6 +101,36 @@ const initDb = async () => {
         is_vpn boolean DEFAULT false,
         is_proxy boolean DEFAULT false,
         detection_reason text,
+        created_at timestamp with time zone DEFAULT now()
+      );
+    `);
+
+    // 7. Roulette Wheel Tables
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS public.wheel_settings (
+        id integer PRIMARY KEY DEFAULT 1,
+        is_enabled boolean DEFAULT true,
+        daily_limit integer DEFAULT 1,
+        segments jsonb DEFAULT '[
+          {"label":"50","value":50,"color":"#f97316"},
+          {"label":"100","value":100,"color":"#eab308"},
+          {"label":"200","value":200,"color":"#22c55e"},
+          {"label":"150","value":150,"color":"#3b82f6"},
+          {"label":"75","value":75,"color":"#a855f7"},
+          {"label":"25","value":25,"color":"#ef4444"},
+          {"label":"300","value":300,"color":"#06b6d4"},
+          {"label":"50","value":50,"color":"#f97316"}
+        ]'::jsonb
+      );
+      INSERT INTO public.wheel_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+    `);
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS public.wheel_spins (
+        id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+        user_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+        result integer NOT NULL,
+        segment_label text NOT NULL,
         created_at timestamp with time zone DEFAULT now()
       );
     `);

@@ -66,7 +66,8 @@ type TabType =
   | 'audit_logs'
   | 'monitor'
   | 'coupons'
-  | 'deposits';
+  | 'deposits'
+  | 'wheel';
 
 export default function AdminPage() {
   const { user, logout, addToast, lang, toggleLang } = useAppStore();
@@ -108,6 +109,11 @@ export default function AdminPage() {
   const [cmsInput, setCmsInput] = useState({ key: '', content: '' });
   const [receiptImageModal, setReceiptImageModal] = useState<string | null>(null);
 
+  // Wheel states
+  const [wheelSettings, setWheelSettings] = useState<any>({ isEnabled: true, dailyLimit: 1, segments: [] });
+  const [wheelHistory, setWheelHistory] = useState<any[]>([]);
+  const [newSegment, setNewSegment] = useState({ label: '', value: '', color: '#f97316' });
+
   // Load basic stats on mount
   useEffect(() => {
     fetchStats();
@@ -136,6 +142,7 @@ export default function AdminPage() {
     else if (activeTab === 'settings') fetchSettings();
     else if (activeTab === 'audit_logs') fetchAuditLogs();
     else if (activeTab === 'overview') fetchStats();
+    else if (activeTab === 'wheel') { fetchWheelSettings(); fetchWheelHistory(); }
   }, [activeTab]);
 
   // API Call wrappers
@@ -276,6 +283,47 @@ export default function AdminPage() {
     } catch (err) {
       console.error('Error fetching live system stats', err);
     }
+  };
+
+  const fetchWheelSettings = async () => {
+    try {
+      const data = await apiRequest('/admin/wheel');
+      setWheelSettings(data);
+    } catch (err: any) { addToast('Error', err.message, 'error'); }
+  };
+
+  const fetchWheelHistory = async () => {
+    try {
+      const data = await apiRequest('/admin/wheel/history');
+      setWheelHistory(data);
+    } catch (err: any) { addToast('Error', err.message, 'error'); }
+  };
+
+  const handleSaveWheelSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiRequest('/admin/wheel', {
+        method: 'POST',
+        body: JSON.stringify(wheelSettings)
+      });
+      addToast('Wheel Saved', 'Wheel settings updated successfully.', 'success');
+    } catch (err: any) { addToast('Error', err.message, 'error'); }
+  };
+
+  const handleAddSegment = () => {
+    if (!newSegment.label || !newSegment.value) return;
+    setWheelSettings((prev: any) => ({
+      ...prev,
+      segments: [...prev.segments, { label: newSegment.label, value: parseInt(newSegment.value), color: newSegment.color }]
+    }));
+    setNewSegment({ label: '', value: '', color: '#f97316' });
+  };
+
+  const handleRemoveSegment = (index: number) => {
+    setWheelSettings((prev: any) => ({
+      ...prev,
+      segments: prev.segments.filter((_: any, i: number) => i !== index)
+    }));
   };
 
   // Actions
@@ -491,6 +539,7 @@ export default function AdminPage() {
     { id: 'fraud', label: t.tab_fraud, icon: ShieldAlert },
     { id: 'cms', label: t.tab_cms, icon: FileText },
     { id: 'coupons', label: isAr ? 'الكوبونات' : 'Coupons', icon: Ticket },
+    { id: 'wheel', label: isAr ? 'عجلة الحظ' : 'Luck Wheel', icon: RefreshCw },
     { id: 'notifications', label: t.tab_notifications, icon: Megaphone },
     { id: 'tickets', label: t.tab_tickets, icon: MessageSquare },
     { id: 'settings', label: t.tab_settings, icon: SettingsIcon },
@@ -764,6 +813,142 @@ export default function AdminPage() {
                 {/* -------------------- 1.5. COUPONS PANEL -------------------- */}
                 {activeTab === 'coupons' && (
                   <CouponsAdminPanel />
+                )}
+
+                {/* -------------------- WHEEL -------------------- */}
+                {activeTab === 'wheel' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{isAr ? 'إعدادات عجلة الحظ' : 'Luck Wheel Settings'}</h2>
+                      <p className="text-slate-400 text-sm mt-1">{isAr ? 'تحكم في قطاعات العجلة وعدد الدورات اليومية' : 'Control wheel segments and daily spin limits'}</p>
+                    </div>
+
+                    <form onSubmit={handleSaveWheelSettings} className="space-y-6">
+                      {/* Enable / Daily limit */}
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="checkbox"
+                            id="wheelEnabled"
+                            checked={wheelSettings.isEnabled}
+                            onChange={e => setWheelSettings((p: any) => ({ ...p, isEnabled: e.target.checked }))}
+                            className="w-5 h-5 accent-amber-500"
+                          />
+                          <label htmlFor="wheelEnabled" className="text-white font-semibold text-sm">
+                            {isAr ? 'تفعيل عجلة الحظ' : 'Enable Luck Wheel'}
+                          </label>
+                        </div>
+                        <div>
+                          <label className="text-slate-400 text-xs font-bold uppercase mb-2 block">
+                            {isAr ? 'عدد الدورات اليومية لكل مستخدم' : 'Daily Spins per User'}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={wheelSettings.dailyLimit}
+                            onChange={e => setWheelSettings((p: any) => ({ ...p, dailyLimit: parseInt(e.target.value) }))}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Segments list */}
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+                        <h3 className="text-white font-bold text-sm">{isAr ? 'قطاعات العجلة' : 'Wheel Segments'}</h3>
+
+                        {wheelSettings.segments.map((seg: any, i: number) => (
+                          <div key={i} className="flex items-center gap-3 bg-slate-950 rounded-xl px-4 py-3 border border-slate-800">
+                            <div className="w-5 h-5 rounded-full flex-shrink-0 border border-white/20" style={{ backgroundColor: seg.color }} />
+                            <span className="text-white text-sm font-bold flex-1">{seg.label}</span>
+                            <span className="text-amber-400 text-sm font-bold">{seg.value} {isAr ? 'نقطة' : 'pts'}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSegment(i)}
+                              className="text-red-400 hover:text-red-300 transition-colors ml-2 cursor-pointer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Add new segment */}
+                        <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-800">
+                          <input
+                            type="text"
+                            placeholder={isAr ? 'التسمية (مثال: 100)' : 'Label (e.g. 100)'}
+                            value={newSegment.label}
+                            onChange={e => setNewSegment(p => ({ ...p, label: e.target.value }))}
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-amber-500"
+                          />
+                          <input
+                            type="number"
+                            placeholder={isAr ? 'القيمة بالنقاط' : 'Points value'}
+                            value={newSegment.value}
+                            onChange={e => setNewSegment(p => ({ ...p, value: e.target.value }))}
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-amber-500"
+                          />
+                          <input
+                            type="color"
+                            value={newSegment.color}
+                            onChange={e => setNewSegment(p => ({ ...p, color: e.target.value }))}
+                            className="w-12 h-10 rounded-xl border border-slate-700 bg-slate-950 cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddSegment}
+                            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                            {isAr ? 'إضافة' : 'Add'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl text-sm transition-colors cursor-pointer"
+                      >
+                        {isAr ? 'حفظ إعدادات العجلة' : 'Save Wheel Settings'}
+                      </button>
+                    </form>
+
+                    {/* Spin History */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                      <div className="p-5 border-b border-slate-800 flex justify-between items-center">
+                        <h3 className="text-white font-bold text-sm">{isAr ? 'سجل الدورات' : 'Spin History'}</h3>
+                        <button onClick={fetchWheelHistory} className="text-slate-400 hover:text-white transition-colors cursor-pointer">
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {wheelHistory.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500 text-sm">{isAr ? 'لا توجد دورات بعد' : 'No spins yet'}</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="border-b border-slate-800 text-[10px] uppercase text-slate-500 font-bold">
+                                <th className="px-5 py-3">{isAr ? 'المستخدم' : 'User'}</th>
+                                <th className="px-5 py-3">{isAr ? 'النتيجة' : 'Result'}</th>
+                                <th className="px-5 py-3">{isAr ? 'التاريخ' : 'Date'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {wheelHistory.map((spin: any) => (
+                                <tr key={spin.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                                  <td className="px-5 py-3 text-slate-300 text-sm font-semibold">{spin.username}</td>
+                                  <td className="px-5 py-3">
+                                    <span className="text-amber-400 font-black text-sm">+{spin.result} {isAr ? 'نقطة' : 'pts'}</span>
+                                  </td>
+                                  <td className="px-5 py-3 text-slate-500 text-xs">{new Date(spin.created_at).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
 
                 {/* -------------------- 2. USER MANAGEMENT -------------------- */}

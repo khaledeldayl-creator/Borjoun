@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import Toasts from "@/components/Toasts";
+import RouletteWheel from "@/components/RouletteWheel";
 import { useAppStore } from "@/store/store";
 import { translations } from "@/utils/translations";
 import { apiRequest } from "@/utils/api";
@@ -455,7 +456,10 @@ export default function Dashboard() {
 
       </div>
 
-      {/* 5. Referrals Widget Section */}
+      {/* 5. Roulette Wheel */}
+      <RouletteWheel />
+
+      {/* 6. Referrals Widget Section */}
       <div 
         id="referrals-section"
         className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-100 shadow-sm relative overflow-hidden"
