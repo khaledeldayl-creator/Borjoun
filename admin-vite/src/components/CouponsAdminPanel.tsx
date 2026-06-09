@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Trash2, Plus, LogOut, Check, Image as ImageIcon, Settings } from 'lucide-react';
 
-const API_URL = '/api/admin';
-const BASE_URL = '';
+const API_URL = 'https://borjoun-production.up.railway.app/api/admin';
+const BASE_URL = 'https://borjoun-production.up.railway.app';
 
 export default function CouponsAdminPanel() {
   const [settings, setSettings] = useState({

@@ -1,4 +1,4 @@
-const BASE_URL = "/api";
+const BASE_URL = "https://borjoun-production.up.railway.app/api";
 
 export async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
