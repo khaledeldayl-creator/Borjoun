@@ -9,6 +9,7 @@ import { useAppStore } from "@/store/store";
 import { translations } from "@/utils/translations";
 import { apiRequest } from "@/utils/api";
 import { formatCurrency } from "@/utils/currency";
+// formatCurrency kept for balance display
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -114,53 +115,6 @@ export default function Dashboard() {
     }
   };
 
-  // Mock survey completions to earn coins
-  const handleSurveyComplete = async (duration: number, rawEGPValue: number) => {
-    const coinReward = Math.round((rawEGPValue * 1000) / 47.50);
-    const usdValue = coinReward / 1000;
-
-    addToast(
-      isAr ? "جاري الاتصال بالاستبيان..." : "Connecting to survey...",
-      isAr ? "جاري محاكاة إكمال الاستبيان الآمن" : "Simulating secure survey submission",
-      "info"
-    );
-
-    try {
-      await apiRequest(
-        `/admin/simulate-postback?network=cpx&payout=${usdValue}&offer_id=${encodeURIComponent(`Survey_${duration}min_${rawEGPValue}EGP`)}`,
-        { method: "POST" }
-      );
-
-      addToast(
-        isAr ? "اكتمل الاستبيان!" : "Survey Completed!",
-        isAr 
-          ? `لقد ربحت ${coinReward} عملة (${formatCurrency(coinReward, currency)})`
-          : `You earned ${coinReward} coins (${formatCurrency(coinReward, currency)})`,
-        "success"
-      );
-
-      const updatedProfile = await apiRequest("/users/profile");
-      setUser(updatedProfile);
-    } catch (err: any) {
-      addToast("Error", err.message || "Failed to complete survey", "error");
-    }
-  };
-
-  // Static survey list matching the mockup
-  const surveys = [
-    { duration: 10, rewardEGP: 3.18, icon: "check_circle", iconColor: "text-green-500" },
-    { duration: 20, rewardEGP: 10.3, icon: "pending_actions", iconColor: "text-blue-500" },
-    { duration: 8, rewardEGP: 14.7, icon: "hourglass_empty", iconColor: "text-amber-500" },
-    { duration: 16, rewardEGP: 9.68, icon: "description", iconColor: "text-indigo-500" },
-    { duration: 12, rewardEGP: 18.9, icon: "quiz", iconColor: "text-rose-500" },
-    { duration: 17, rewardEGP: 6.88, icon: "bar_chart", iconColor: "text-amber-600" },
-  ];
-
-  const formatStaticEGP = (egpValue: number) => {
-    const coins = (egpValue * 1000) / 47.50;
-    return formatCurrency(coins, currency);
-  };
-
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return isAr ? "صباح الخير" : "Good Morning";
@@ -198,54 +152,22 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 2. Featured Surveys */}
-      <div className="flex flex-col gap-4">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-xl">analytics</span>
-            <h3 className="font-display text-lg font-black text-on-surface">
-              {isAr ? "استطلاعات مميزة" : "Featured Surveys"}
-            </h3>
-          </div>
-          <button 
-            onClick={() => navigate("/offers")}
-            className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary-hover transition-colors"
-          >
-            <span>{isAr ? "عرض الكل" : "View All"}</span>
-            <span className="material-symbols-outlined text-xs scale-x-[-1]">arrow_right_alt</span>
-          </button>
+      {/* 2. Start Earning CTA */}
+      <div
+        onClick={() => navigate("/offers")}
+        className="bg-gradient-to-r from-primary to-amber-500 p-6 md:p-8 rounded-[32px] flex items-center justify-between gap-4 cursor-pointer hover:opacity-95 active:scale-[0.99] transition-all shadow-lg shadow-orange-100"
+      >
+        <div className="flex flex-col gap-1">
+          <h3 className="font-display text-xl font-black text-white">
+            {isAr ? "ابدأ الكسب الآن" : "Start Earning Now"}
+          </h3>
+          <p className="text-xs text-white/80 font-medium">
+            {isAr ? "أكمل العروض والاستبيانات وحوّل وقتك إلى أرباح حقيقية" : "Complete offers & surveys and turn your time into real rewards"}
+          </p>
         </div>
-
-        {/* Survey Cards Horiz Scroll */}
-        <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-orange-100 scrollbar-track-transparent">
-          {surveys.map((survey, index) => (
-            <div
-              key={index}
-              onClick={() => handleSurveyComplete(survey.duration, survey.rewardEGP)}
-              className="bg-white p-5 rounded-3xl border border-slate-100 min-w-[170px] flex-1 flex flex-col gap-4 hover:border-primary/30 hover:scale-[1.02] cursor-pointer transition-all duration-200 shadow-sm"
-            >
-              {/* Card top row */}
-              <div className="flex justify-between items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400">
-                  {survey.duration} {isAr ? "دقيقة" : "min"}
-                </span>
-                <span className={`material-symbols-outlined text-lg ${survey.iconColor}`}>
-                  {survey.icon}
-                </span>
-              </div>
-
-              {/* Reward Value */}
-              <div className="flex flex-col gap-0.5">
-                <span className="font-display text-lg font-black text-on-surface">
-                  {formatStaticEGP(survey.rewardEGP)}
-                </span>
-                <span className="text-[10px] font-bold text-on-surface-variant">
-                  {isAr ? "مكافأة الاستطلاع" : "Survey Reward"}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <span className="material-symbols-outlined text-white text-4xl flex-shrink-0">
+          arrow_forward
+        </span>
       </div>
 
       {/* 3. Performance & Activity */}
