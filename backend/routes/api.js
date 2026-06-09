@@ -229,7 +229,7 @@ router.get('/check-ip', async (req, res) => {
 });
 
 // --- Admin: Simulate Postback (Dev/Testing) ---
-router.post('/admin/simulate-postback', requireAuth, async (req, res) => {
+router.post('/admin/simulate-postback', requireAdmin, async (req, res) => {
   const { network, payout, offer_id } = req.query;
   if (!network || !payout) return res.status(400).json({ error: 'Missing network or payout' });
 

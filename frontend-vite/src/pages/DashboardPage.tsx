@@ -300,7 +300,7 @@ export default function Dashboard() {
                   <span className="text-[8px] font-bold text-slate-400">{day.label}</span>
                   <span className="text-[8px] font-bold text-primary mt-1">
                     {day.gift ? (isAr ? "حتى " : "up to ") : ""}
-                    {formatStaticEGP(day.value).split(" ")[0]}
+                    {formatCurrency(day.value, 'EGP').split(" ")[0]}
                   </span>
                 </div>
               </div>
