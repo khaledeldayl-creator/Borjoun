@@ -22,15 +22,13 @@ interface Offerwall {
 
 export default function Offers() {
   const navigate = useNavigate();
-  const { token, lang, user, setUser, addToast, currency } = useAppStore();
+  const { token, lang, user, addToast, currency } = useAppStore();
   const t = translations[lang];
   const isAr = lang === "ar";
 
   const [offerwalls, setOfferwalls] = useState<Offerwall[]>([]);
   const [loadingWalls, setLoadingWalls] = useState(true);
   const [selectedWall, setSelectedWall] = useState<Offerwall | null>(null);
-  const [loading, setLoading] = useState(false);
-
   useEffect(() => {
     if (!token) {
       navigate("/login");
@@ -79,36 +77,6 @@ export default function Offers() {
     );
   };
 
-  const handleSimulateCompletion = async (offerName: string, coinsVal: number) => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const payoutDollar = coinsVal / 1000.0;
-      const network = selectedWall?.id || "generic";
-      
-      const response = await apiRequest(
-        `/admin/simulate-postback?network=${network}&payout=${payoutDollar}&offer_id=${encodeURIComponent(offerName)}`,
-        { method: "POST" }
-      );
-
-      addToast(
-        isAr ? "اكتمل العرض بنجاح!" : "Offer Completed!", 
-        isAr ? `تم محاكاة الطلب وإضافة الرصيد لحسابك!` : `Mock postback triggered! ${response.message}`, 
-        "success"
-      );
-      
-      const profile = await apiRequest("/users/profile");
-      setUser(profile);
-    } catch (err: any) {
-      addToast(
-        isAr ? "خطأ في الاتصال" : "Postback Trigger Error", 
-        err.message || "Failed to trigger postback", 
-        "error"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getGeneratedIframeUrl = (wall: Offerwall) => {
     if (!user) return "";
@@ -175,71 +143,37 @@ export default function Offers() {
         </div>
       )}
 
-      {/* Sandbox Offerwall Iframe simulation */}
+      {/* Real Offerwall Iframe Modal */}
       {selectedWall && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl h-[80vh] rounded-[32px] overflow-hidden border border-slate-100 flex flex-col shadow-2xl relative">
-            
+          <div className="bg-white w-full max-w-5xl h-[90vh] rounded-[32px] overflow-hidden border border-slate-100 flex flex-col shadow-2xl">
+
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+            <div className="px-6 py-4 border-b border-slate-50 flex justify-between items-center bg-white shrink-0">
               <div className="flex items-center gap-3">
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
-                <h2 className="font-display font-black text-on-surface text-sm">
-                  {selectedWall.name} {isAr ? "بوابة المحاكاة والربح الآمن" : "Secure Sandbox Connection"}
-                </h2>
+                <div>
+                  <h2 className="font-display font-black text-on-surface text-sm">{selectedWall.name}</h2>
+                  <p className="text-[10px] text-slate-400 font-semibold">
+                    {isAr ? "أكمل العروض لكسب النقاط تلقائياً" : "Complete offers to earn coins automatically"}
+                  </p>
+                </div>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedWall(null)}
-                className="text-secondary hover:text-on-surface font-black text-xl cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors cursor-pointer"
               >
-                close
+                <span className="material-symbols-outlined text-sm text-slate-600">close</span>
               </button>
             </div>
 
-            {/* Simulation Sandbox Grid */}
-            <div className="flex-1 p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/20">
-              <div className="flex flex-col justify-between p-6 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                <div>
-                  <h3 className="font-display font-black text-on-surface text-sm">CPX / Lootably Integration Sandbox</h3>
-                  <p className="text-[11px] text-on-surface-variant mt-2 leading-relaxed font-medium">
-                    For testing purposes, click any action to simulate offer completions. Under the hood, this fires a signed Webhook (postback) payload containing hashes to credit your balance automatically.
-                  </p>
-                </div>
-                
-                {/* Offers List */}
-                <div className="mt-6 flex flex-col gap-3">
-                  {[
-                    { name: "Complete Quick Profile Survey", coins: 850 },
-                    { name: "Install TikTok & Register Account", coins: 4500 },
-                    { name: "Complete Level 50 in Lords Mobile", coins: 15000 },
-                    { name: "Watch 3 Video Ads", coins: 150 },
-                  ].map((offer) => (
-                    <div 
-                      key={offer.name} 
-                      onClick={() => handleSimulateCompletion(offer.name, offer.coins)}
-                      className="flex justify-between items-center p-3 border border-slate-100 bg-slate-50 hover:bg-orange-50 hover:border-orange-100 rounded-xl cursor-pointer transition-all"
-                    >
-                      <span className="text-[10px] font-bold text-on-surface">{offer.name}</span>
-                      <span className="font-display text-[10px] font-black text-primary bg-orange-50 border border-orange-100 px-3 py-1 rounded-lg">
-                        +{formatCurrency(offer.coins, currency)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="border-2 border-dashed border-slate-200 rounded-2xl flex flex-col justify-center items-center p-8 bg-slate-50/40 text-center">
-                <span className="material-symbols-outlined text-5xl text-slate-300 mb-3">iframe</span>
-                <h4 className="font-display font-black text-on-surface text-xs">Live Production IFrame View</h4>
-                <p className="text-[10px] text-on-surface-variant mt-2 max-w-sm leading-relaxed font-semibold">
-                  In production, this area will load the wall URL directly: <br />
-                  <code className="block bg-white p-2 rounded border border-slate-100 mt-2 font-mono text-[9px] break-all text-primary font-bold">
-                    {getGeneratedIframeUrl(selectedWall)}
-                  </code>
-                </p>
-              </div>
-            </div>
-
+            {/* Iframe */}
+            <iframe
+              src={getGeneratedIframeUrl(selectedWall)}
+              className="flex-1 w-full border-0"
+              title={selectedWall.name}
+              allow="camera; microphone; geolocation"
+            />
           </div>
         </div>
       )}
